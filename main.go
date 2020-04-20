@@ -1,97 +1,46 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"log"
 	"os"
-	"regexp"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/google/gousb"
-	"github.com/google/gousb/usbid"
 	"github.com/half2me/antgo/message"
-	"github.com/manifoldco/promptui"
 	"github.com/pkg/errors"
 )
 
-type deviceDesc gousb.DeviceDesc
-
-func (dd deviceDesc) humanReadable() string {
-	return fmt.Sprintf("%s (%s) (%s)",
-		usbid.Vendors[dd.Vendor].Product[dd.Product],
-		usbid.Vendors[dd.Vendor],
-		usbid.Classes[dd.Class])
-}
-
-type deviceDescs []*deviceDesc
-
-func (dds deviceDescs) humanReadables() []string {
-	pattern := regexp.MustCompile(`.*[aA][nN][tT].*`)
-	var containingAnt []string
-	var items []string
-	for _, d := range dds {
-		desc := d.humanReadable()
-		if pattern.MatchString(desc) {
-			containingAnt = append(containingAnt, desc)
-			continue
-		}
-		items = append(items, desc)
-	}
-	return append(containingAnt, items...)
-}
-
-func (dds deviceDescs) get(result string) *deviceDesc {
-	for _, d := range dds {
-		if result == d.humanReadable() {
-			return d
-		}
-	}
-	return nil
-}
-
-func getDeviceDescriptions(ctx *gousb.Context) (deviceDescs, error) {
-	var ds []*deviceDesc
-	_, err := ctx.OpenDevices(func(desc *gousb.DeviceDesc) bool {
-		ds = append(ds, (*deviceDesc)(desc))
-		return false
-	})
-	return ds, errors.Wrap(err, "opening devices")
-}
-
 func main() {
-	if err := run(); err != nil {
+	sigs := make(chan os.Signal)
+	signal.Notify(sigs, syscall.SIGINT)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		for range sigs {
+			fmt.Printf("Received signal, cancelling...")
+			cancel()
+		}
+	}()
+	defer cancel()
+	if err := run(ctx); err != nil {
 		fmt.Printf("error whilst running: %+v", err)
 	}
 }
 
-func run() error {
-	ctx := gousb.NewContext()
-	ctx.Debug(3)
-	defer ctx.Close()
+func run(ctx context.Context) error {
+	usbCtx := gousb.NewContext()
+	usbCtx.Debug(3)
+	defer usbCtx.Close()
 
-	ds, err := getDeviceDescriptions(ctx)
+	chosen, err := userSelectDevice(usbCtx)
 	if err != nil {
-		fmt.Printf("Error while listing devices: %s", err)
+		return err
 	}
 
-	prompt := promptui.Select{
-		Label: "Select Device",
-		Items: ds.humanReadables(),
-	}
-
-	_, result, err := prompt.Run()
-	if err != nil {
-		return errors.Wrap(err, "running prompt")
-	}
-
-	fmt.Printf("You choose %q\n", result)
-	chosen := ds.get(result)
-	if chosen == nil {
-		return errors.Errorf("chosen device cannot be found: %s", result)
-	}
-
-	dev, err := ctx.OpenDeviceWithVIDPID(chosen.Vendor, chosen.Product)
+	dev, err := usbCtx.OpenDeviceWithVIDPID(chosen.Vendor, chosen.Product)
 	if err != nil {
 		return errors.Wrap(err, "opening device")
 	}
@@ -102,6 +51,8 @@ func run() error {
 		if cErr := dev.Close(); cErr != nil {
 			log.Printf("Error closing device: %v", cErr)
 		}
+		// TODO(glynternet): debug log
+		log.Println("device closed")
 	}()
 
 	if err := dev.SetAutoDetach(true); err != nil {
@@ -116,17 +67,28 @@ func run() error {
 		if cErr := cfg.Close(); cErr != nil {
 			log.Printf("Error closing config: %v", cErr)
 		}
+		// TODO(glynternet): debug log
+		log.Println("config closed")
 	}()
 
 	intf, err := cfg.Interface(0, 0)
 	if err != nil {
 		return errors.Wrap(err, "claiming interface")
 	}
-	defer intf.Close()
+	defer func() {
+		intf.Close()
+		// TODO(glynternet): debug log
+		log.Println("interface closed")
+	}()
 
 	inep, err := intf.InEndpoint(1)
 	if err != nil {
-		return errors.Wrap(err, "using in-endpoint")
+		return errors.Wrap(err, "preparing in-endpoint")
+	}
+
+	outep, err := intf.OutEndpoint(1)
+	if err != nil {
+		return errors.Wrap(err, "preparing out-endpoint")
 	}
 
 	readstr, err := inep.NewStream(64, 1)
@@ -137,40 +99,78 @@ func run() error {
 		if cErr := readstr.Close(); cErr != nil {
 			log.Printf("Error closing in-endpoint stream: %v", cErr)
 		}
+		// TODO(glynternet): debug log
+		log.Println("readstream closed")
 	}()
+
+	// TODO(glynternet): can I do something with the main timeout here?
+	sendCtx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := sendRxScanModeMessages(sendCtx, outep); err != nil {
+		return errors.Wrap(err, "sending rx scan mode messages")
+	}
 
 	opCtx := context.Background()
 	buf := make([]byte, 64)
-	s := make(chan interface{})
+	fmt.Println("Listening for messages...")
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			n, err := readstr.ReadContext(opCtx, buf)
+			if err != nil {
+				log.Printf("Error reading from stream: %+v", err)
+				return errors.Wrap(err, "reading from stream")
+			}
 
-	go func() {
-		for {
-			select {
-			case <-s:
-				return
-			default:
-				n, err := readstr.ReadContext(opCtx, buf)
-				if err != nil {
-					log.Printf("Error reading from stream: %+v", err)
-					return
-				}
+			if n < 12 {
+				continue
+			}
 
-				if n < 12 {
-					continue
-				}
-
-				if buf[0] == message.MESSAGE_TX_SYNC {
-					packet := message.AntPacket(buf)
-					if packet.Class() == message.MESSAGE_TYPE_BROADCAST {
-						msg := message.AntBroadcastMessage(packet)
-						fmt.Println(msg.String())
-					}
+			if buf[0] == message.MESSAGE_TX_SYNC {
+				packet := message.AntPacket(buf)
+				if packet.Class() == message.MESSAGE_TYPE_BROADCAST {
+					msg := message.AntBroadcastMessage(packet)
+					fmt.Println(msg.String())
+					fmt.Sprintf("%+v", msg)
 				}
 			}
 		}
-	}()
-	r := bufio.NewReader(os.Stdin)
-	r.ReadLine()
-	s <- true
+	}
+}
+
+func sendRxScanModeMessages(ctx context.Context, ep *gousb.OutEndpoint) error {
+	for _, packet := range []struct {
+		packet message.AntPacket
+		desc   string
+	}{{
+		packet: message.SystemResetMessage(),
+		desc:   "system reset message",
+	}, {
+		packet: message.SetNetworkKeyMessage(0, []byte(message.ANTPLUS_NETWORK_KEY)),
+		desc:   "set network key message",
+	}, {
+		packet: message.AssignChannelMessage(0, message.CHANNEL_TYPE_ONEWAY_RECEIVE),
+		desc:   "assign channel message",
+	}, {
+		packet: message.SetChannelIdMessage(0),
+		desc:   "set channel ID message",
+	}, {
+		packet: message.SetChannelRfFrequencyMessage(0, 2457),
+		desc:   "set channel RF Frequency message",
+	}, {
+		packet: message.EnableExtendedMessagesMessage(true),
+		desc:   "enable extended messages message",
+	}, {
+		packet: message.LibConfigMessage(true, true, true),
+		desc:   "lib config message",
+	}, {
+		packet: message.OpenRxScanModeMessage(),
+		desc:   "open rx scan mode message",
+	}} {
+		if _, err := ep.WriteContext(ctx, packet.packet); err != nil {
+			return errors.Wrapf(err, "sending message: %s", packet.desc)
+		}
+	}
 	return nil
 }
