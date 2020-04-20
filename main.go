@@ -25,12 +25,18 @@ func main() {
 		}
 	}()
 	defer cancel()
-	if err := run(ctx); err != nil {
+	if err := run(ctx, config{
+		debug:        true,
+	}); err != nil {
 		fmt.Printf("error whilst running: %+v", err)
 	}
 }
 
-func run(ctx context.Context) error {
+type config struct {
+	debug        bool
+}
+
+func run(ctx context.Context, cfg config) error {
 	usbCtx := gousb.NewContext()
 	usbCtx.Debug(3)
 	defer usbCtx.Close()
@@ -51,34 +57,37 @@ func run(ctx context.Context) error {
 		if cErr := dev.Close(); cErr != nil {
 			log.Printf("Error closing device: %v", cErr)
 		}
-		// TODO(glynternet): debug log
-		log.Println("device closed")
+		if cfg.debug {
+			log.Println("device closed")
+		}
 	}()
 
 	if err := dev.SetAutoDetach(true); err != nil {
 		return errors.Wrap(err, "setting up autodetach")
 	}
 
-	cfg, err := dev.Config(1)
+	devCfg, err := dev.Config(1)
 	if err != nil {
 		return errors.Wrap(err, "something with configuration?!")
 	}
 	defer func() {
-		if cErr := cfg.Close(); cErr != nil {
+		if cErr := devCfg.Close(); cErr != nil {
 			log.Printf("Error closing config: %v", cErr)
 		}
-		// TODO(glynternet): debug log
-		log.Println("config closed")
+		if cfg.debug {
+			log.Println("config closed")
+		}
 	}()
 
-	intf, err := cfg.Interface(0, 0)
+	intf, err := devCfg.Interface(0, 0)
 	if err != nil {
 		return errors.Wrap(err, "claiming interface")
 	}
 	defer func() {
 		intf.Close()
-		// TODO(glynternet): debug log
-		log.Println("interface closed")
+		if cfg.debug {
+			log.Println("interface closed")
+		}
 	}()
 
 	inep, err := intf.InEndpoint(1)
@@ -99,13 +108,14 @@ func run(ctx context.Context) error {
 		if cErr := readstr.Close(); cErr != nil {
 			log.Printf("Error closing in-endpoint stream: %v", cErr)
 		}
-		// TODO(glynternet): debug log
-		log.Println("readstream closed")
+		if cfg.debug {
+			log.Println("readstream closed")
+		}
 	}()
 
 	// TODO(glynternet): can I do something with the main timeout here?
 	sendCtx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-	if err := sendRxScanModeMessages(sendCtx, outep); err != nil {
+	if err := sendRxScanModeMessages(sendCtx, cfg.debug, outep); err != nil {
 		return errors.Wrap(err, "sending rx scan mode messages")
 	}
 
@@ -140,7 +150,7 @@ func run(ctx context.Context) error {
 	}
 }
 
-func sendRxScanModeMessages(ctx context.Context, ep *gousb.OutEndpoint) error {
+func sendRxScanModeMessages(ctx context.Context, debug bool, ep *gousb.OutEndpoint) error {
 	for _, packet := range []struct {
 		packet message.AntPacket
 		desc   string
@@ -171,6 +181,9 @@ func sendRxScanModeMessages(ctx context.Context, ep *gousb.OutEndpoint) error {
 	}} {
 		if _, err := ep.WriteContext(ctx, packet.packet); err != nil {
 			return errors.Wrapf(err, "sending message: %s", packet.desc)
+		}
+		if debug {
+			fmt.Printf("Message sent: %s\n", packet.desc)
 		}
 	}
 	return nil
