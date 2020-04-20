@@ -111,6 +111,7 @@ func run(ctx context.Context) error {
 
 	opCtx := context.Background()
 	buf := make([]byte, 64)
+	var p printer
 	fmt.Println("Listening for messages...")
 	for {
 		select {
@@ -130,9 +131,9 @@ func run(ctx context.Context) error {
 			if buf[0] == message.MESSAGE_TX_SYNC {
 				packet := message.AntPacket(buf)
 				if packet.Class() == message.MESSAGE_TYPE_BROADCAST {
-					msg := message.AntBroadcastMessage(packet)
-					fmt.Println(msg.String())
-					fmt.Sprintf("%+v", msg)
+					if err := VisitMessage(p, message.AntBroadcastMessage(packet)); err != nil {
+						return errors.Wrap(err, "visiting message")
+					}
 				}
 			}
 		}
