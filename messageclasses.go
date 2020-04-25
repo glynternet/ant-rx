@@ -32,9 +32,10 @@ const (
 	messageClassNotifStartup     = "notif_startup"
 	messageClassCwInit           = "cw_init"
 	messageClassCwTest           = "cw_test"
+	messageClassUnknown          = "unknown"
 )
 
-func messageClasses() map[byte]string {
+func packetClasses() map[byte]string {
 	return map[byte]string{
 		// From here: https://github.com/GoldenCheetah/GoldenCheetah/blob/3a31f5d131df46c90e25810a876ee4c5e0db5512/src/ANT/ANT.h
 		0x41: messageClassUnassignChannel,  //ANT_UNASSIGN_CHANNEL
@@ -68,5 +69,6 @@ func messageClasses() map[byte]string {
 		0x6F: messageClassNotifStartup,     //ANT_NOTIF_STARTUP
 		0x53: messageClassCwInit,           //ANT_CW_INIT
 		0x48: messageClassCwTest,           //ANT_CW_TEST
+		0xFF: messageClassUnknown,
 	}
 }

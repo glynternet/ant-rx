@@ -136,8 +136,9 @@ func setupInterface(debug bool, usbCtx *gousb.Context, device *deviceDesc) (*gou
 	}, nil
 }
 
-func handleMessages(ctx context.Context, str *gousb.ReadStream, v AntBroadcastMessageVisitor) error {
-	classes := messageClasses()
+func handleMessages(ctx context.Context, str *gousb.ReadStream, handler AntDeviceMessageHandler) error {
+	decodePacketClass := packetClassDecoder(packetClasses())
+	handleBroadcastMessage := deviceMessageHandler(handler)
 	buf := make([]byte, 64)
 	for {
 		select {
@@ -159,22 +160,36 @@ func handleMessages(ctx context.Context, str *gousb.ReadStream, v AntBroadcastMe
 				continue
 			}
 
-			packet := message.AntPacket(buf)
-			t, ok := classes[packet.Class()]
-			if !ok {
-				fmt.Printf("Unknown packet class: %d\n", packet.Class())
-				continue
+			class, err := decodePacketClass(message.AntPacket(buf).Class())
+			if err != nil {
+				return err
 			}
-			switch t {
+			switch class {
 			case messageClassBroadcastData:
-				if err := VisitMessage(v, message.AntBroadcastMessage(packet)); err != nil {
+				if err := handleBroadcastMessage(buf); err != nil {
 					return errors.Wrap(err, "visiting message,")
 				}
 			default:
-				fmt.Printf("Received packet: %s\n", t)
+				fmt.Printf("Received packet: %s\n", class)
 			}
 		}
 	}
+}
+
+func packetClassDecoder(classes map[byte]string) func(b byte) (string, error) {
+	return func(b byte) (string, error) {
+		class, ok := classes[b]
+		if !ok {
+			return messageClassUnknown, unknownPacketError(b)
+		}
+		return class, nil
+	}
+}
+
+type unknownPacketError byte
+
+func (dev unknownPacketError) Error() string {
+	return fmt.Sprintf("unknown packet: %X", byte(dev))
 }
 
 func sendRxScanModeMessages(ctx context.Context, debug bool, ep *gousb.OutEndpoint) error {
