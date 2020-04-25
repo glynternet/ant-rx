@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -15,6 +17,9 @@ import (
 )
 
 func main() {
+	debug := flag.Bool("debug", false, "debug logging")
+	printUnknown := flag.Bool("print-unknown", false, "print unknown message types")
+	flag.Parse()
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs, syscall.SIGINT)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -26,109 +31,120 @@ func main() {
 	}()
 	defer cancel()
 	if err := run(ctx, config{
-		debug:        true,
+		printUnknown: *printUnknown,
+		debug:        *debug,
 	}); err != nil {
 		fmt.Printf("error whilst running: %+v", err)
 	}
 }
 
 type config struct {
+	printUnknown bool
 	debug        bool
 }
 
 func run(ctx context.Context, cfg config) error {
 	usbCtx := gousb.NewContext()
 	usbCtx.Debug(3)
-	defer usbCtx.Close()
+	defer func() {
+		if cErr := usbCtx.Close(); cErr != nil {
+			log.Printf("Error closing USB context: %v", cErr)
+		}
+		if cfg.debug {
+			log.Println("USB context closed")
+		}
+	}()
 
 	chosen, err := userSelectDevice(usbCtx)
 	if err != nil {
 		return err
 	}
 
-	dev, err := usbCtx.OpenDeviceWithVIDPID(chosen.Vendor, chosen.Product)
+	itf, close, err := setupInterface(cfg.debug, usbCtx, chosen)
 	if err != nil {
-		return errors.Wrap(err, "opening device")
+		return errors.Wrap(err, "setting up USB interface")
 	}
-	if dev == nil {
-		return errors.New("open device is nil")
-	}
-	defer func() {
-		if cErr := dev.Close(); cErr != nil {
-			log.Printf("Error closing device: %v", cErr)
-		}
-		if cfg.debug {
-			log.Println("device closed")
-		}
-	}()
+	defer close()
 
-	if err := dev.SetAutoDetach(true); err != nil {
-		return errors.Wrap(err, "setting up autodetach")
-	}
-
-	devCfg, err := dev.Config(1)
-	if err != nil {
-		return errors.Wrap(err, "something with configuration?!")
-	}
-	defer func() {
-		if cErr := devCfg.Close(); cErr != nil {
-			log.Printf("Error closing config: %v", cErr)
-		}
-		if cfg.debug {
-			log.Println("config closed")
-		}
-	}()
-
-	intf, err := devCfg.Interface(0, 0)
-	if err != nil {
-		return errors.Wrap(err, "claiming interface")
-	}
-	defer func() {
-		intf.Close()
-		if cfg.debug {
-			log.Println("interface closed")
-		}
-	}()
-
-	inep, err := intf.InEndpoint(1)
+	inep, err := itf.InEndpoint(1)
 	if err != nil {
 		return errors.Wrap(err, "preparing in-endpoint")
 	}
 
-	outep, err := intf.OutEndpoint(1)
+	outep, err := itf.OutEndpoint(1)
 	if err != nil {
 		return errors.Wrap(err, "preparing out-endpoint")
+	}
+	sendCtx, _ := context.WithTimeout(ctx, 10*time.Second)
+	if err := sendRxScanModeMessages(sendCtx, cfg.debug, outep); err != nil {
+		return errors.Wrap(err, "sending rx scan mode messages")
 	}
 
 	readstr, err := inep.NewStream(64, 1)
 	if err != nil {
 		return errors.Wrap(err, "preparing new in-endpoint stream for reading")
 	}
-	defer func() {
-		if cErr := readstr.Close(); cErr != nil {
-			log.Printf("Error closing in-endpoint stream: %v", cErr)
-		}
-		if cfg.debug {
-			log.Println("readstream closed")
-		}
-	}()
+	defer deferredClose(readstr, cfg.debug, "in-endpoint stream")
 
-	// TODO(glynternet): can I do something with the main timeout here?
-	sendCtx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-	if err := sendRxScanModeMessages(sendCtx, cfg.debug, outep); err != nil {
-		return errors.Wrap(err, "sending rx scan mode messages")
+	p := printer{printUnknown: cfg.printUnknown}
+	fmt.Println("Listening for messages...")
+	return handleMessages(ctx, readstr, p)
+}
+
+func setupInterface(debug bool, usbCtx *gousb.Context, device *deviceDesc) (*gousb.Interface, func(), error) {
+	dev, err := usbCtx.OpenDeviceWithVIDPID(device.Vendor, device.Product)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "opening device")
+	}
+	if dev == nil {
+		return nil, nil, errors.New("open device is nil")
+	}
+	closeFns := []func(){deferredClose(dev, debug, "device")}
+	if err := dev.SetAutoDetach(true); err != nil {
+		for _, closeFn := range closeFns {
+			closeFn()
+		}
+		return nil, nil, errors.Wrap(err, "setting up autodetach")
 	}
 
-	opCtx := context.Background()
+	devCfg, err := dev.Config(1)
+	if err != nil {
+		for _, closeFn := range closeFns {
+			closeFn()
+		}
+		return nil, nil, errors.Wrap(err, "something with configuration?!")
+	}
+	closeFns = append([]func(){deferredClose(devCfg, debug, "config")}, closeFns...)
+
+	intf, err := devCfg.Interface(0, 0)
+	if err != nil {
+		for _, closeFn := range closeFns {
+			closeFn()
+		}
+		return nil, nil, errors.Wrap(err, "claiming interface")
+	}
+	closeFns = append([]func(){func() {
+		intf.Close()
+		if debug {
+			log.Println("interface closed")
+		}
+	}}, closeFns...)
+	return intf, func() {
+		for _, closeFn := range closeFns {
+			closeFn()
+		}
+	}, nil
+}
+
+func handleMessages(ctx context.Context, str *gousb.ReadStream, v AntBroadcastMessageVisitor) error {
+	classes := messageClasses()
 	buf := make([]byte, 64)
-	var p printer
-	fmt.Println("Listening for messages...")
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		default:
-			n, err := readstr.ReadContext(opCtx, buf)
+			n, err := str.ReadContext(ctx, buf)
 			if err != nil {
 				log.Printf("Error reading from stream: %+v", err)
 				return errors.Wrap(err, "reading from stream")
@@ -140,10 +156,18 @@ func run(ctx context.Context, cfg config) error {
 
 			if buf[0] == message.MESSAGE_TX_SYNC {
 				packet := message.AntPacket(buf)
-				if packet.Class() == message.MESSAGE_TYPE_BROADCAST {
-					if err := VisitMessage(p, message.AntBroadcastMessage(packet)); err != nil {
-						return errors.Wrap(err, "visiting message")
+				t, ok := classes[packet.Class()]
+				if !ok {
+					fmt.Printf("Unknown packet class: %d\n", packet.Class())
+					continue
+				}
+				switch t {
+				case messageClassBroadcastData:
+					if err := VisitMessage(v, message.AntBroadcastMessage(packet)); err != nil {
+						return errors.Wrap(err, "visiting message,")
 					}
+				default:
+					fmt.Printf("Received packet: %s\n", t)
 				}
 			}
 		}
@@ -187,4 +211,15 @@ func sendRxScanModeMessages(ctx context.Context, debug bool, ep *gousb.OutEndpoi
 		}
 	}
 	return nil
+}
+
+func deferredClose(c io.Closer, debug bool, name string) func() {
+	return func() {
+		if cErr := c.Close(); cErr != nil {
+			log.Printf("Error closing Closer %s: %v", name, cErr)
+		}
+		if debug {
+			log.Printf("device closed: %s", name)
+		}
+	}
 }
