@@ -4,7 +4,7 @@ import "github.com/half2me/antgo/message"
 
 type packetHandler struct {
 	broadcastMessage func(message.AntBroadcastMessage) error
-	unhandled        func(string, message.AntPacket) error
+	unknown          func(string, message.AntPacket) error
 }
 
 func (p packetHandler) BroadcastMessage(msg message.AntBroadcastMessage) error {
@@ -15,8 +15,8 @@ func (p packetHandler) BroadcastMessage(msg message.AntBroadcastMessage) error {
 }
 
 func (p packetHandler) Unknown(class string, packet message.AntPacket) error {
-	if p.unhandled == nil {
+	if p.unknown == nil {
 		return nil
 	}
-	return p.unhandled(class, packet)
+	return p.unknown(class, packet)
 }

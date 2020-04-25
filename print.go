@@ -8,8 +8,8 @@ import (
 
 func newPacketPrinter(printUnknown bool) packetHandler {
 	return packetHandler{
-		unhandled: func(class string, p message.AntPacket) error {
-			fmt.Printf("Received unhandled packet: %s\n", class)
+		unknown: func(class string, p message.AntPacket) error {
+			fmt.Printf("Received unknown packet: %s\n", class)
 			return nil
 		},
 		broadcastMessage: deviceMessageHandler(deviceMessagePrinter{printUnknown: printUnknown}),

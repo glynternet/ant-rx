@@ -179,7 +179,7 @@ func handlePacket(packetClasses map[byte]string, handler AntMessageHandler) AntP
 			}
 		default:
 			if err := handler.Unknown(class, packet); err != nil {
-				return errors.Wrap(err, "handling unhandled packet class")
+				return errors.Wrap(err, "handling unknown packet class")
 			}
 		}
 		return nil

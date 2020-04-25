@@ -32,7 +32,7 @@ const (
 	messageClassNotifStartup     = "notif_startup"
 	messageClassCwInit           = "cw_init"
 	messageClassCwTest           = "cw_test"
-	messageClassUnknown          = "unhandled"
+	messageClassUnknown          = "unknown"
 )
 
 func packetClasses() map[byte]string {
