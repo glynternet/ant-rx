@@ -11,7 +11,7 @@ import (
 func UserSelectDevice(ctx *gousb.Context) (*DeviceDesc, error) {
 	ds, err := getDeviceDescriptions(ctx)
 	if err != nil {
-		fmt.Printf("Error while listing devices: %s", err)
+		fmt.Printf("Error while listing devices: %s\n", err)
 	}
 
 	containsAnt := containsANTFunc()
@@ -20,10 +20,10 @@ func UserSelectDevice(ctx *gousb.Context) (*DeviceDesc, error) {
 		// items ordered with ANT-containing descriptions first
 		Items: append(
 			ds.matching(func(desc *DeviceDesc) bool {
-				return containsAnt(desc.humanReadable())
+				return containsAnt(desc.HumanReadable())
 			}),
 			ds.matching(func(desc *DeviceDesc) bool {
-				return !containsAnt(desc.humanReadable())
+				return !containsAnt(desc.HumanReadable())
 			})...,
 		).humanReadables(),
 	}

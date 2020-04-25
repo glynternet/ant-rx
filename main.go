@@ -21,6 +21,7 @@ import (
 func main() {
 	debug := flag.Bool("debug", false, "debug logging")
 	printUnknown := flag.Bool("print-unknown", false, "print unknown message types")
+	detectDevice := flag.Bool("detect-device", false, "automatically detect ANT USB device")
 	flag.Parse()
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs, syscall.SIGINT)
@@ -32,37 +33,41 @@ func main() {
 		}
 	}()
 	defer cancel()
-	if err := run(ctx, config{
+
+	app := antRXApp{
 		printUnknown: *printUnknown,
-		debug:        *debug,
-	}); err != nil {
+		debugMode:    *debug,
+		detectDevice: *detectDevice,
+	}
+	if err := app.run(ctx); err != nil {
 		fmt.Printf("error whilst running: %+v", err)
 	}
 }
 
-type config struct {
+type antRXApp struct {
 	printUnknown bool
-	debug        bool
+	debugMode    bool
+	detectDevice bool
 }
 
-func run(ctx context.Context, cfg config) error {
+func (app antRXApp) run(ctx context.Context) error {
 	usbCtx := gousb.NewContext()
 	usbCtx.Debug(3)
 	defer func() {
 		if cErr := usbCtx.Close(); cErr != nil {
 			log.Printf("Error closing USB context: %v", cErr)
 		}
-		if cfg.debug {
+		if app.debugMode {
 			log.Println("USB context closed")
 		}
 	}()
 
-	chosen, err := usbprompt.UserSelectDevice(usbCtx)
+	device, err := app.usbDevice(usbCtx)
 	if err != nil {
-		return errors.Wrap(err, "getting user selected USB device")
+		return errors.Wrap(err, "getting ANT USB")
 	}
 
-	itf, close, err := setupInterface(cfg.debug, usbCtx, chosen)
+	itf, close, err := setupInterface(app.debugMode, usbCtx, device)
 	if err != nil {
 		return errors.Wrap(err, "setting up USB interface")
 	}
@@ -78,7 +83,7 @@ func run(ctx context.Context, cfg config) error {
 		return errors.Wrap(err, "preparing out-endpoint")
 	}
 	sendCtx, _ := context.WithTimeout(ctx, 10*time.Second)
-	if err := sendRxScanModeMessages(sendCtx, cfg.debug, outep); err != nil {
+	if err := sendRxScanModeMessages(sendCtx, app.debugMode, outep); err != nil {
 		return errors.Wrap(err, "sending rx scan mode messages")
 	}
 
@@ -86,10 +91,22 @@ func run(ctx context.Context, cfg config) error {
 	if err != nil {
 		return errors.Wrap(err, "preparing new in-endpoint stream for reading")
 	}
-	defer deferredClose(readstr, cfg.debug, "in-endpoint stream")
+	defer deferredClose(readstr, app.debugMode, "in-endpoint stream")
 
 	fmt.Println("Listening for messages...")
-	return handleMessages(ctx, readstr, ant.NewPacketHandler(newPacketPrinter(cfg.printUnknown)))
+	return handleMessages(ctx, readstr, ant.NewPacketHandler(newPacketPrinter(app.printUnknown)))
+}
+
+func (app antRXApp) usbDevice(usbCtx *gousb.Context) (*usbprompt.DeviceDesc, error) {
+	if app.detectDevice {
+		device, err := usbprompt.DetectDevice(usbCtx)
+		if device != nil {
+			fmt.Printf("Detected device: %s\n", device.HumanReadable())
+		}
+		return device, errors.Wrap(err, "getting detecting AND USB device")
+	}
+	device, err := usbprompt.UserSelectDevice(usbCtx)
+	return device, errors.Wrap(err, "getting user selected USB device")
 }
 
 func setupInterface(debug bool, usbCtx *gousb.Context, device *usbprompt.DeviceDesc) (*gousb.Interface, func(), error) {

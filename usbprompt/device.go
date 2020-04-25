@@ -11,7 +11,7 @@ import (
 
 type DeviceDesc gousb.DeviceDesc
 
-func (dd DeviceDesc) humanReadable() string {
+func (dd DeviceDesc) HumanReadable() string {
 	return fmt.Sprintf("%s (%s) (%s)",
 		usbid.Vendors[dd.Vendor].Product[dd.Product],
 		usbid.Vendors[dd.Vendor],
@@ -33,14 +33,14 @@ func (dds deviceDescs) matching(match func(*DeviceDesc) bool) deviceDescs {
 func (dds deviceDescs) humanReadables() []string {
 	var items []string
 	for _, d := range dds {
-		items = append(items, d.humanReadable())
+		items = append(items, d.HumanReadable())
 	}
 	return items
 }
 
 func (dds deviceDescs) get(result string) *DeviceDesc {
 	for _, d := range dds {
-		if result == d.humanReadable() {
+		if result == d.HumanReadable() {
 			return d
 		}
 	}
