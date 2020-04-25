@@ -135,7 +135,7 @@ func setupInterface(debug bool, usbCtx *gousb.Context, device *deviceDesc) (*gou
 	}, nil
 }
 
-func handleMessages(ctx context.Context, str *gousb.ReadStream, handler AntPacketHandler) error {
+func handleMessages(ctx context.Context, str *gousb.ReadStream, handler AntMessageHandler) error {
 	decodePacketClass := packetClassDecoder(packetClasses())
 	buf := make([]byte, 64)
 	for {
@@ -176,7 +176,7 @@ func handleMessages(ctx context.Context, str *gousb.ReadStream, handler AntPacke
 	}
 }
 
-type AntPacketHandler interface {
+type AntMessageHandler interface {
 	BroadcastMessage(message.AntBroadcastMessage) error
 	Unknown(string, message.AntPacket) error
 }
