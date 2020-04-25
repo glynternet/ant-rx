@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/glynternet/ant-rx/usbprompt"
 	"github.com/google/gousb"
 	"github.com/half2me/antgo/message"
 	"github.com/pkg/errors"
@@ -55,9 +56,9 @@ func run(ctx context.Context, cfg config) error {
 		}
 	}()
 
-	chosen, err := userSelectDevice(usbCtx)
+	chosen, err := usbprompt.UserSelectDevice(usbCtx)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "getting user selected USB device")
 	}
 
 	itf, close, err := setupInterface(cfg.debug, usbCtx, chosen)
@@ -90,7 +91,7 @@ func run(ctx context.Context, cfg config) error {
 	return handleMessages(ctx, readstr, handlePacket(packetClasses(), newPacketPrinter(cfg.printUnknown)))
 }
 
-func setupInterface(debug bool, usbCtx *gousb.Context, device *deviceDesc) (*gousb.Interface, func(), error) {
+func setupInterface(debug bool, usbCtx *gousb.Context, device *usbprompt.DeviceDesc) (*gousb.Interface, func(), error) {
 	dev, err := usbCtx.OpenDeviceWithVIDPID(device.Vendor, device.Product)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "opening device")

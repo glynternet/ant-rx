@@ -1,4 +1,4 @@
-package main
+package usbprompt
 
 import (
 	"fmt"
@@ -6,20 +6,19 @@ import (
 
 	"github.com/google/gousb"
 	"github.com/google/gousb/usbid"
-	"github.com/manifoldco/promptui"
 	"github.com/pkg/errors"
 )
 
-type deviceDesc gousb.DeviceDesc
+type DeviceDesc gousb.DeviceDesc
 
-func (dd deviceDesc) humanReadable() string {
+func (dd DeviceDesc) humanReadable() string {
 	return fmt.Sprintf("%s (%s) (%s)",
 		usbid.Vendors[dd.Vendor].Product[dd.Product],
 		usbid.Vendors[dd.Vendor],
 		usbid.Classes[dd.Class])
 }
 
-type deviceDescs []*deviceDesc
+type deviceDescs []*DeviceDesc
 
 func (dds deviceDescs) humanReadables() []string {
 	pattern := regexp.MustCompile(`.*[aA][nN][tT].*`)
@@ -36,7 +35,7 @@ func (dds deviceDescs) humanReadables() []string {
 	return append(containingAnt, items...)
 }
 
-func (dds deviceDescs) get(result string) *deviceDesc {
+func (dds deviceDescs) get(result string) *DeviceDesc {
 	for _, d := range dds {
 		if result == d.humanReadable() {
 			return d
@@ -46,34 +45,10 @@ func (dds deviceDescs) get(result string) *deviceDesc {
 }
 
 func getDeviceDescriptions(ctx *gousb.Context) (deviceDescs, error) {
-	var ds []*deviceDesc
+	var ds []*DeviceDesc
 	_, err := ctx.OpenDevices(func(desc *gousb.DeviceDesc) bool {
-		ds = append(ds, (*deviceDesc)(desc))
+		ds = append(ds, (*DeviceDesc)(desc))
 		return false
 	})
 	return ds, errors.Wrap(err, "opening devices")
-}
-
-func userSelectDevice(ctx *gousb.Context) (*deviceDesc, error) {
-	ds, err := getDeviceDescriptions(ctx)
-	if err != nil {
-		fmt.Printf("Error while listing devices: %s", err)
-	}
-
-	prompt := promptui.Select{
-		Label: "Select Device",
-		Items: ds.humanReadables(),
-	}
-
-	_, result, err := prompt.Run()
-	if err != nil {
-		return nil, errors.Wrap(err, "running prompt")
-	}
-
-	fmt.Printf("You chose %q\n", result)
-	chosen := ds.get(result)
-	if chosen == nil {
-		return nil, errors.Errorf("chosen device cannot be found: %s", result)
-	}
-	return chosen, nil
 }
