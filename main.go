@@ -154,21 +154,24 @@ func handleMessages(ctx context.Context, str *gousb.ReadStream, v AntBroadcastMe
 				continue
 			}
 
-			if buf[0] == message.MESSAGE_TX_SYNC {
-				packet := message.AntPacket(buf)
-				t, ok := classes[packet.Class()]
-				if !ok {
-					fmt.Printf("Unknown packet class: %d\n", packet.Class())
-					continue
+			if buf[0] != message.MESSAGE_TX_SYNC {
+				fmt.Printf("First byte was not ANT serial message Tx sync byte")
+				continue
+			}
+
+			packet := message.AntPacket(buf)
+			t, ok := classes[packet.Class()]
+			if !ok {
+				fmt.Printf("Unknown packet class: %d\n", packet.Class())
+				continue
+			}
+			switch t {
+			case messageClassBroadcastData:
+				if err := VisitMessage(v, message.AntBroadcastMessage(packet)); err != nil {
+					return errors.Wrap(err, "visiting message,")
 				}
-				switch t {
-				case messageClassBroadcastData:
-					if err := VisitMessage(v, message.AntBroadcastMessage(packet)); err != nil {
-						return errors.Wrap(err, "visiting message,")
-					}
-				default:
-					fmt.Printf("Received packet: %s\n", t)
-				}
+			default:
+				fmt.Printf("Received packet: %s\n", t)
 			}
 		}
 	}
