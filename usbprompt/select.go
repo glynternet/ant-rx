@@ -14,9 +14,18 @@ func UserSelectDevice(ctx *gousb.Context) (*DeviceDesc, error) {
 		fmt.Printf("Error while listing devices: %s", err)
 	}
 
+	containsAnt := containsANTFunc()
 	prompt := promptui.Select{
 		Label: "Select Device",
-		Items: ds.humanReadables(),
+		// items ordered with ANT-containing descriptions first
+		Items: append(
+			ds.matching(func(desc *DeviceDesc) bool {
+				return containsAnt(desc.humanReadable())
+			}),
+			ds.matching(func(desc *DeviceDesc) bool {
+				return !containsAnt(desc.humanReadable())
+			})...,
+		).humanReadables(),
 	}
 
 	_, result, err := prompt.Run()

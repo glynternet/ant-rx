@@ -20,19 +20,22 @@ func (dd DeviceDesc) humanReadable() string {
 
 type deviceDescs []*DeviceDesc
 
+func (dds deviceDescs) matching(match func(*DeviceDesc) bool) deviceDescs {
+	var matches deviceDescs
+	for _, dd := range dds {
+		if match(dd) {
+			matches = append(matches, dd)
+		}
+	}
+	return matches
+}
+
 func (dds deviceDescs) humanReadables() []string {
-	pattern := regexp.MustCompile(`.*[aA][nN][tT].*`)
-	var containingAnt []string
 	var items []string
 	for _, d := range dds {
-		desc := d.humanReadable()
-		if pattern.MatchString(desc) {
-			containingAnt = append(containingAnt, desc)
-			continue
-		}
-		items = append(items, desc)
+		items = append(items, d.humanReadable())
 	}
-	return append(containingAnt, items...)
+	return items
 }
 
 func (dds deviceDescs) get(result string) *DeviceDesc {
