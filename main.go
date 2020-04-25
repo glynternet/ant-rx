@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/glynternet/ant-rx/ant"
 	"github.com/glynternet/ant-rx/usbprompt"
 	"github.com/google/gousb"
 	"github.com/half2me/antgo/message"
@@ -88,7 +89,7 @@ func run(ctx context.Context, cfg config) error {
 	defer deferredClose(readstr, cfg.debug, "in-endpoint stream")
 
 	fmt.Println("Listening for messages...")
-	return handleMessages(ctx, readstr, handlePacket(packetClasses(), newPacketPrinter(cfg.printUnknown)))
+	return handleMessages(ctx, readstr, ant.NewPacketHandler(newPacketPrinter(cfg.printUnknown)))
 }
 
 func setupInterface(debug bool, usbCtx *gousb.Context, device *usbprompt.DeviceDesc) (*gousb.Interface, func(), error) {
@@ -136,7 +137,7 @@ func setupInterface(debug bool, usbCtx *gousb.Context, device *usbprompt.DeviceD
 	}, nil
 }
 
-func handleMessages(ctx context.Context, str *gousb.ReadStream, handlePacket AntPacketHandler) error {
+func handleMessages(ctx context.Context, str *gousb.ReadStream, handlePacket ant.PacketHandler) error {
 	buf := make([]byte, 64)
 	for {
 		select {
@@ -164,34 +165,6 @@ func handleMessages(ctx context.Context, str *gousb.ReadStream, handlePacket Ant
 
 		}
 	}
-}
-
-func handlePacket(packetClasses map[byte]string, handler AntMessageHandler) AntPacketHandler {
-	decodePacketClass := packetClassDecoder(packetClasses)
-	return func(packet message.AntPacket) error {
-		class, err := decodePacketClass(packet.Class())
-		if err != nil {
-			return err
-		}
-		switch class {
-		case packetClassBroadcastData:
-			if err := handler.BroadcastMessage(message.AntBroadcastMessage(packet)); err != nil {
-				return errors.Wrap(err, "visiting message,")
-			}
-		default:
-			if err := handler.Unknown(class, packet); err != nil {
-				return errors.Wrap(err, "handling unknown packet class")
-			}
-		}
-		return nil
-	}
-}
-
-type AntPacketHandler func(message.AntPacket) error
-
-type AntMessageHandler interface {
-	BroadcastMessage(message.AntBroadcastMessage) error
-	Unknown(string, message.AntPacket) error
 }
 
 func sendRxScanModeMessages(ctx context.Context, debug bool, ep *gousb.OutEndpoint) error {

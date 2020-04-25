@@ -1,4 +1,4 @@
-package main
+package ant
 
 import "fmt"
 
@@ -49,5 +49,5 @@ func deviceClassDecoder(classes map[byte]string) func(b byte) (string, error) {
 type unknownDeviceError byte
 
 func (dev unknownDeviceError) Error() string {
-	return fmt.Sprintf("unknown device: %X", byte(dev))
+	return fmt.Sprintf("UnknownHandler device: %X", byte(dev))
 }

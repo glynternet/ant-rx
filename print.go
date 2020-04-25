@@ -3,15 +3,16 @@ package main
 import (
 	"fmt"
 
+	"github.com/glynternet/ant-rx/ant"
 	"github.com/half2me/antgo/message"
 )
 
-func newPacketPrinter(printUnknown bool) packetHandler {
-	return packetHandler{
-		unknown: func(class string, p message.AntPacket) error {
+func newPacketPrinter(printUnknown bool) ant.MessageHandler {
+	return ant.OptionalPacketHandlers{
+		UnknownHandler: func(class string, p message.AntPacket) error {
 			return printf("Received unknown packet: %s\n", class)
 		},
-		broadcastMessage: deviceMessageHandler(deviceMessagePrinter{printUnknown: printUnknown}),
+		BroadcastMessageHandler: ant.NewMessageHandler(deviceMessagePrinter{printUnknown: printUnknown}),
 	}
 }
 
@@ -27,7 +28,7 @@ func (p deviceMessagePrinter) PowerMessage(message message.PowerMessage) error {
 	return print(message)
 }
 
-func (p deviceMessagePrinter) HeartRateMessage(message HeartRateMessage) error {
+func (p deviceMessagePrinter) HeartRateMessage(message ant.HeartRateMessage) error {
 	return print(message)
 }
 
