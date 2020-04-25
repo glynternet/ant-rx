@@ -34,22 +34,6 @@ func deviceMessageHandler(h AntDeviceMessageHandler) func(m message.AntBroadcast
 	}
 }
 
-func deviceClassDecoder(classes map[byte]string) func(b byte) (string, error) {
-	return func(b byte) (string, error) {
-		class, ok := classes[b]
-		if !ok {
-			return deviceClassUnknown, unknownDeviceError(b)
-		}
-		return class, nil
-	}
-}
-
-type unknownDeviceError byte
-
-func (dev unknownDeviceError) Error() string {
-	return fmt.Sprintf("unknown device: %X", byte(dev))
-}
-
 type HeartRateMessage message.AntPacket
 
 func (hrm HeartRateMessage) BeatCount() uint8 {

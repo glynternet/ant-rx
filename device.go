@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 const (
 	deviceClassBikePowerSensor                   = "Bike Power Sensor"
 	deviceClassControl                           = "Control"
@@ -32,4 +34,20 @@ func deviceClasses() map[byte]string {
 		124: deviceClassStrideBasedSpeedAndDistanceSensor,
 		255: deviceClassUnknown,
 	}
+}
+
+func deviceClassDecoder(classes map[byte]string) func(b byte) (string, error) {
+	return func(b byte) (string, error) {
+		class, ok := classes[b]
+		if !ok {
+			return deviceClassUnknown, unknownDeviceError(b)
+		}
+		return class, nil
+	}
+}
+
+type unknownDeviceError byte
+
+func (dev unknownDeviceError) Error() string {
+	return fmt.Sprintf("unknown device: %X", byte(dev))
 }

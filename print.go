@@ -9,8 +9,7 @@ import (
 func newPacketPrinter(printUnknown bool) packetHandler {
 	return packetHandler{
 		unknown: func(class string, p message.AntPacket) error {
-			fmt.Printf("Received unknown packet: %s\n", class)
-			return nil
+			return printf("Received unknown packet: %s\n", class)
 		},
 		broadcastMessage: deviceMessageHandler(deviceMessagePrinter{printUnknown: printUnknown}),
 	}
@@ -21,21 +20,27 @@ type deviceMessagePrinter struct {
 }
 
 func (p deviceMessagePrinter) SpeedAndCadenceMessage(message message.SpeedAndCadenceMessage) error {
-	fmt.Println(message)
-	return nil
+	return print(message)
 }
 
 func (p deviceMessagePrinter) PowerMessage(message message.PowerMessage) error {
-	fmt.Println(message)
-	return nil
+	return print(message)
 }
 
 func (p deviceMessagePrinter) HeartRateMessage(message HeartRateMessage) error {
-	fmt.Println(message)
-	return nil
+	return print(message)
 }
 
 func (p deviceMessagePrinter) Unknown(s string, message message.AntBroadcastMessage) error {
-	fmt.Printf("Unknown Device Type: %d, %s\n", s, message)
+	return printf("Unknown Device Type: %d, %s\n", s, message)
+}
+
+func print(v interface{}) error {
+	fmt.Println(v)
+	return nil
+}
+
+func printf(format string, a ...interface{}) error {
+	fmt.Printf(format, a...)
 	return nil
 }
