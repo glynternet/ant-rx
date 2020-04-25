@@ -52,3 +52,9 @@ func getDeviceDescriptions(ctx *gousb.Context) (deviceDescs, error) {
 	})
 	return ds, errors.Wrap(err, "opening devices")
 }
+
+var _ = containsANTFunc()
+
+func containsANTFunc() func(s string) bool {
+	return regexp.MustCompile(`.*[aA][nN][tT].*`).MatchString
+}
