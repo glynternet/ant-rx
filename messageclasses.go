@@ -32,43 +32,43 @@ const (
 	messageClassNotifStartup     = "notif_startup"
 	messageClassCwInit           = "cw_init"
 	messageClassCwTest           = "cw_test"
-	messageClassUnknown          = "unknown"
+	messageClassUnknown          = "unhandled"
 )
 
 func packetClasses() map[byte]string {
 	return map[byte]string{
 		// From here: https://github.com/GoldenCheetah/GoldenCheetah/blob/3a31f5d131df46c90e25810a876ee4c5e0db5512/src/ANT/ANT.h
-		0x41: messageClassUnassignChannel,  //ANT_UNASSIGN_CHANNEL
-		0x42: messageClassAssignChannel,    //ANT_ASSIGN_CHANNEL
-		0x51: messageClassChannelID,        //ANT_CHANNEL_ID
-		0x43: messageClassChannelPeriod,    //ANT_CHANNEL_PERIOD
-		0x44: messageClassSearchTKL,        //ANT_SEARCH_TIMEOUT
-		0x45: messageClassChannelFrequency, //ANT_CHANNEL_FREQUENCY
-		0x46: messageClassSetNetwork,       //ANT_SET_NETWORK
-		0x47: messageClassTxPower,          //ANT_TX_POWER
-		0x59: messageClassIdListAdd,        //ANT_ID_LIST_ADD
-		0x5A: messageClassIdListConfig,     //ANT_ID_LIST_CONFIG
-		0x60: messageClassChanneltxPower,   //ANT_CHANNEL_TX_POWER
-		0x63: messageClassLpSearchTimeout,  //ANT_LP_SEARCH_TIMEOUT
-		0x65: messageClassSetSerialNumber,  //ANT_SET_SERIAL_NUMBER
-		0x66: messageClassEnableExtMsgs,    //ANT_ENABLE_EXT_MSGS
-		0x68: messageClassEnableLED,        //ANT_ENABLE_LED
-		0x4A: messageClassSystemReset,      //ANT_SYSTEM_RESET
-		0x4B: messageClassOpenChannel,      //ANT_OPEN_CHANNEL
-		0x4C: messageClassCloseChannel,     //ANT_CLOSE_CHANNEL
-		0x5B: messageClassOpenRXScanCH,     //ANT_OPEN_RX_SCAN_CH
-		0x4D: messageClassReqMessage,       //ANT_REQ_MESSAGE
-		0x4E: messageClassBroadcastData,    //ANT_BROADCAST_DATA
-		0x4F: messageClassAckData,          //ANT_ACK_DATA
-		0x50: messageClassBurstData,        //ANT_BURST_DATA
-		0x40: messageClassChannelEvent,     //ANT_CHANNEL_EVENT
-		0x52: messageClassChannelStatus,    //ANT_CHANNEL_STATUS
-		0x3E: messageClassVersion,          //ANT_VERSION
-		0x54: messageClassCapabilities,     //ANT_CAPABILITIES
-		0x61: messageClassSerialNumber,     //ANT_SERIAL_NUMBER
-		0x6F: messageClassNotifStartup,     //ANT_NOTIF_STARTUP
-		0x53: messageClassCwInit,           //ANT_CW_INIT
-		0x48: messageClassCwTest,           //ANT_CW_TEST
+		0x41: messageClassUnassignChannel,
+		0x42: messageClassAssignChannel,
+		0x51: messageClassChannelID,
+		0x43: messageClassChannelPeriod,
+		0x44: messageClassSearchTKL,
+		0x45: messageClassChannelFrequency,
+		0x46: messageClassSetNetwork,
+		0x47: messageClassTxPower,
+		0x59: messageClassIdListAdd,
+		0x5A: messageClassIdListConfig,
+		0x60: messageClassChanneltxPower,
+		0x63: messageClassLpSearchTimeout,
+		0x65: messageClassSetSerialNumber,
+		0x66: messageClassEnableExtMsgs,
+		0x68: messageClassEnableLED,
+		0x4A: messageClassSystemReset,
+		0x4B: messageClassOpenChannel,
+		0x4C: messageClassCloseChannel,
+		0x5B: messageClassOpenRXScanCH,
+		0x4D: messageClassReqMessage,
+		0x4E: messageClassBroadcastData,
+		0x4F: messageClassAckData,
+		0x50: messageClassBurstData,
+		0x40: messageClassChannelEvent,
+		0x52: messageClassChannelStatus,
+		0x3E: messageClassVersion,
+		0x54: messageClassCapabilities,
+		0x61: messageClassSerialNumber,
+		0x6F: messageClassNotifStartup,
+		0x53: messageClassCwInit,
+		0x48: messageClassCwTest,
 		0xFF: messageClassUnknown,
 	}
 }

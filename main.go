@@ -87,7 +87,7 @@ func run(ctx context.Context, cfg config) error {
 	defer deferredClose(readstr, cfg.debug, "in-endpoint stream")
 
 	fmt.Println("Listening for messages...")
-	return handleMessages(ctx, readstr, newPacketPrinter(cfg.printUnknown, packetClasses(), deviceClasses()))
+	return handleMessages(ctx, readstr, handlePacket(packetClasses(), newPacketPrinter(cfg.printUnknown)))
 }
 
 func setupInterface(debug bool, usbCtx *gousb.Context, device *deviceDesc) (*gousb.Interface, func(), error) {
@@ -135,8 +135,7 @@ func setupInterface(debug bool, usbCtx *gousb.Context, device *deviceDesc) (*gou
 	}, nil
 }
 
-func handleMessages(ctx context.Context, str *gousb.ReadStream, handler AntMessageHandler) error {
-	decodePacketClass := packetClassDecoder(packetClasses())
+func handleMessages(ctx context.Context, str *gousb.ReadStream, handlePacket AntPacketHandler) error {
 	buf := make([]byte, 64)
 	for {
 		select {
@@ -158,23 +157,36 @@ func handleMessages(ctx context.Context, str *gousb.ReadStream, handler AntMessa
 				continue
 			}
 
-			class, err := decodePacketClass(message.AntPacket(buf).Class())
-			if err != nil {
-				return err
+			if err := handlePacket(buf); err != nil {
+				return errors.Wrap(err, "handling ANT packet")
 			}
-			switch class {
-			case messageClassBroadcastData:
-				if err := handler.BroadcastMessage(buf); err != nil {
-					return errors.Wrap(err, "visiting message,")
-				}
-			default:
-				if err := handler.Unknown(class, buf); err != nil {
-					return errors.Wrap(err, "handling unhandled packet class")
-				}
-			}
+
 		}
 	}
 }
+
+func handlePacket(packetClasses map[byte]string, handler AntMessageHandler) AntPacketHandler {
+	decodePacketClass := packetClassDecoder(packetClasses)
+	return func(packet message.AntPacket) error {
+		class, err := decodePacketClass(packet.Class())
+		if err != nil {
+			return err
+		}
+		switch class {
+		case messageClassBroadcastData:
+			if err := handler.BroadcastMessage(message.AntBroadcastMessage(packet)); err != nil {
+				return errors.Wrap(err, "visiting message,")
+			}
+		default:
+			if err := handler.Unknown(class, packet); err != nil {
+				return errors.Wrap(err, "handling unhandled packet class")
+			}
+		}
+		return nil
+	}
+}
+
+type AntPacketHandler func(message.AntPacket) error
 
 type AntMessageHandler interface {
 	BroadcastMessage(message.AntBroadcastMessage) error

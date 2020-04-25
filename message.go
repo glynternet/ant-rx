@@ -10,7 +10,7 @@ type AntDeviceMessageHandler interface {
 	SpeedAndCadenceMessage(message.SpeedAndCadenceMessage) error
 	PowerMessage(message.PowerMessage) error
 	HeartRateMessage(HeartRateMessage) error
-	Unknown(message.AntBroadcastMessage) error
+	Unknown(string, message.AntBroadcastMessage) error
 }
 
 func deviceMessageHandler(h AntDeviceMessageHandler) func(m message.AntBroadcastMessage) error {
@@ -30,7 +30,7 @@ func deviceMessageHandler(h AntDeviceMessageHandler) func(m message.AntBroadcast
 		case deviceClassHeartRateSensor:
 			return h.HeartRateMessage(HeartRateMessage(m))
 		}
-		return h.Unknown(m)
+		return h.Unknown(c, m)
 	}
 }
 
