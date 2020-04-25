@@ -155,14 +155,13 @@ func handleMessages(ctx context.Context, str *gousb.ReadStream, handlePacket ant
 			}
 
 			if buf[0] != message.MESSAGE_TX_SYNC {
-				fmt.Printf("First byte was not ANT serial message Tx sync byte")
+				fmt.Printf("First byte was not ANT serial message Tx sync byte\n")
 				continue
 			}
 
 			if err := handlePacket(buf); err != nil {
 				return errors.Wrap(err, "handling ANT packet")
 			}
-
 		}
 	}
 }
