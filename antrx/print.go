@@ -1,4 +1,4 @@
-package main
+package antrx
 
 import (
 	"encoding/json"
