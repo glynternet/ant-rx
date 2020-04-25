@@ -42,23 +42,27 @@ func NewMessageHandler(h AntDeviceMessageHandler) func(m message.AntBroadcastMes
 			return err
 		}
 
+		d := Device{
+			Number: m.DeviceNumber(),
+			Class:  c,
+		}
 		switch c {
 		case deviceClassBikeSpeedAndCadenceSensor:
-			return h.SpeedAndCadenceMessage(message.SpeedAndCadenceMessage(m))
+			return h.SpeedAndCadenceMessage(d, message.SpeedAndCadenceMessage(m))
 		case deviceClassBikePowerSensor:
-			return h.PowerMessage(message.PowerMessage(m))
+			return h.PowerMessage(d, message.PowerMessage(m))
 		case deviceClassHeartRateSensor:
-			return h.HeartRateMessage(HeartRateMessage(m))
+			return h.HeartRateMessage(d, HeartRateMessage(m))
 		}
-		return h.Unknown(c, m)
+		return h.Unknown(d, m)
 	}
 }
 
 type AntDeviceMessageHandler interface {
-	SpeedAndCadenceMessage(message.SpeedAndCadenceMessage) error
-	PowerMessage(message.PowerMessage) error
-	HeartRateMessage(HeartRateMessage) error
-	Unknown(string, message.AntBroadcastMessage) error
+	SpeedAndCadenceMessage(Device, message.SpeedAndCadenceMessage) error
+	PowerMessage(Device, message.PowerMessage) error
+	HeartRateMessage(Device, HeartRateMessage) error
+	Unknown(Device, message.AntBroadcastMessage) error
 }
 
 type OptionalPacketHandlers struct {

@@ -18,6 +18,11 @@ const (
 	deviceClassUnknown                           = "Unknown Device"
 )
 
+type Device struct {
+	Number uint16
+	Class  string
+}
+
 func deviceClasses() map[byte]string {
 	return map[byte]string{
 		11:  deviceClassBikePowerSensor,

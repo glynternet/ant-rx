@@ -23,11 +23,10 @@ func newPacketPrinter(printUnknown bool) ant.MessageHandler {
 }
 
 type deviceMessagePrinter struct {
-	printUnknown    bool
-	prevSpeedCadMsg message.SpeedAndCadenceMessage
+	printUnknown bool
 }
 
-func (p deviceMessagePrinter) SpeedAndCadenceMessage(msg message.SpeedAndCadenceMessage) error {
+func (p deviceMessagePrinter) SpeedAndCadenceMessage(d ant.Device, msg message.SpeedAndCadenceMessage) error {
 	type speed struct {
 		EventTime                 uint16
 		CumulativeRevolutionCount uint16
@@ -41,7 +40,7 @@ func (p deviceMessagePrinter) SpeedAndCadenceMessage(msg message.SpeedAndCadence
 		Cadence cadence
 	}
 
-	return jsonPrintDeviceMessage(message.AntBroadcastMessage(msg).DeviceNumber(), "speed and cadence", speedAndCadence{
+	return jsonPrintDeviceMessage(d, "speed and cadence", speedAndCadence{
 		Speed: speed{
 			EventTime:                 msg.SpeedEventTime(),
 			CumulativeRevolutionCount: msg.CumulativeSpeedRevolutionCount(),
@@ -53,7 +52,7 @@ func (p deviceMessagePrinter) SpeedAndCadenceMessage(msg message.SpeedAndCadence
 	})
 }
 
-func (p deviceMessagePrinter) PowerMessage(msg message.PowerMessage) error {
+func (p deviceMessagePrinter) PowerMessage(d ant.Device, msg message.PowerMessage) error {
 	type power struct {
 		AccumulatedPower     uint16
 		EventCount           uint8
@@ -61,7 +60,7 @@ func (p deviceMessagePrinter) PowerMessage(msg message.PowerMessage) error {
 		InstantaneousPower   uint16
 	}
 
-	return jsonPrintDeviceMessage(message.AntBroadcastMessage(msg).DeviceNumber(), "power", power{
+	return jsonPrintDeviceMessage(d, "power", power{
 		AccumulatedPower:     msg.AccumulatedPower(),
 		EventCount:           msg.EventCount(),
 		InstantaneousCadence: msg.InstantaneousCadence(),
@@ -69,31 +68,32 @@ func (p deviceMessagePrinter) PowerMessage(msg message.PowerMessage) error {
 	})
 }
 
-func (p deviceMessagePrinter) HeartRateMessage(msg ant.HeartRateMessage) error {
-	msg.HeartRate()
-	msg.BeatCount()
+func (p deviceMessagePrinter) HeartRateMessage(d ant.Device, msg ant.HeartRateMessage) error {
 	type heartRate struct {
 		Rate  uint8
 		Count uint8
 	}
-	return jsonPrintDeviceMessage(message.AntBroadcastMessage(msg).DeviceNumber(), "heart rate", heartRate{
+	return jsonPrintDeviceMessage(d, "heart rate", heartRate{
 		Rate:  msg.HeartRate(),
 		Count: msg.BeatCount(),
 	})
 }
 
-func (p deviceMessagePrinter) Unknown(s string, message message.AntBroadcastMessage) error {
-	return jsonPrintDeviceMessage(message.DeviceNumber(), "unknown", struct {
-		Class string
+func (p deviceMessagePrinter) Unknown(d ant.Device, msg message.AntBroadcastMessage) error {
+	if !p.printUnknown {
+		return nil
+	}
+	return jsonPrintDeviceMessage(d, "unknown", struct {
+		Message string
 	}{
-		Class: s,
+		Message: string(msg),
 	})
 }
 
-func jsonPrintDeviceMessage(deviceNumber uint16, name string, v interface{}) error {
-	return jsonPrint(name, devicePrintMessage{
-		DeviceNumber: deviceNumber,
-		Message:      v,
+func jsonPrintDeviceMessage(device ant.Device, name string, v interface{}) error {
+	return jsonPrint(name, printableDeviceMessage{
+		Device:  device,
+		Message: v,
 	})
 }
 
@@ -106,7 +106,7 @@ func jsonPrint(name string, v interface{}) error {
 	return nil
 }
 
-type devicePrintMessage struct {
-	DeviceNumber uint16
-	Message      interface{}
+type printableDeviceMessage struct {
+	Device  ant.Device
+	Message interface{}
 }
