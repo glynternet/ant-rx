@@ -173,7 +173,7 @@ func handlePacket(packetClasses map[byte]string, handler AntMessageHandler) AntP
 			return err
 		}
 		switch class {
-		case messageClassBroadcastData:
+		case packetClassBroadcastData:
 			if err := handler.BroadcastMessage(message.AntBroadcastMessage(packet)); err != nil {
 				return errors.Wrap(err, "visiting message,")
 			}
@@ -191,22 +191,6 @@ type AntPacketHandler func(message.AntPacket) error
 type AntMessageHandler interface {
 	BroadcastMessage(message.AntBroadcastMessage) error
 	Unknown(string, message.AntPacket) error
-}
-
-func packetClassDecoder(classes map[byte]string) func(b byte) (string, error) {
-	return func(b byte) (string, error) {
-		class, ok := classes[b]
-		if !ok {
-			return messageClassUnknown, unknownPacketError(b)
-		}
-		return class, nil
-	}
-}
-
-type unknownPacketError byte
-
-func (dev unknownPacketError) Error() string {
-	return fmt.Sprintf("unknown packet: %X", byte(dev))
 }
 
 func sendRxScanModeMessages(ctx context.Context, debug bool, ep *gousb.OutEndpoint) error {
