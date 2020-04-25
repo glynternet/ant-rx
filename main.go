@@ -86,9 +86,8 @@ func run(ctx context.Context, cfg config) error {
 	}
 	defer deferredClose(readstr, cfg.debug, "in-endpoint stream")
 
-	p := printer{printUnknown: cfg.printUnknown}
 	fmt.Println("Listening for messages...")
-	return handleMessages(ctx, readstr, p)
+	return handleMessages(ctx, readstr, newPacketPrinter(cfg.printUnknown, packetClasses(), deviceClasses()))
 }
 
 func setupInterface(debug bool, usbCtx *gousb.Context, device *deviceDesc) (*gousb.Interface, func(), error) {
@@ -136,9 +135,8 @@ func setupInterface(debug bool, usbCtx *gousb.Context, device *deviceDesc) (*gou
 	}, nil
 }
 
-func handleMessages(ctx context.Context, str *gousb.ReadStream, handler AntDeviceMessageHandler) error {
+func handleMessages(ctx context.Context, str *gousb.ReadStream, handler AntPacketHandler) error {
 	decodePacketClass := packetClassDecoder(packetClasses())
-	handleBroadcastMessage := deviceMessageHandler(handler)
 	buf := make([]byte, 64)
 	for {
 		select {
@@ -166,14 +164,21 @@ func handleMessages(ctx context.Context, str *gousb.ReadStream, handler AntDevic
 			}
 			switch class {
 			case messageClassBroadcastData:
-				if err := handleBroadcastMessage(buf); err != nil {
+				if err := handler.BroadcastMessage(buf); err != nil {
 					return errors.Wrap(err, "visiting message,")
 				}
 			default:
-				fmt.Printf("Received packet: %s\n", class)
+				if err := handler.Unknown(class, buf); err != nil {
+					return errors.Wrap(err, "handling unhandled packet class")
+				}
 			}
 		}
 	}
+}
+
+type AntPacketHandler interface {
+	BroadcastMessage(message.AntBroadcastMessage) error
+	Unknown(string, message.AntPacket) error
 }
 
 func packetClassDecoder(classes map[byte]string) func(b byte) (string, error) {
